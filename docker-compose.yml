@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: ai-paper-bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Override DB_PATH via environment variables to ensure it persists in the volume map
+      - DB_PATH=/app/data/papers.db
