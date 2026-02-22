@@ -5,7 +5,7 @@ from config import RUN_INTERVAL_SECONDS
 from database import init_db, is_paper_processed, mark_paper_processed
 from paper_fetcher import fetch_recent_papers
 from summarizer import summarize_paper
-from slack_bot import post_paper_summary
+from slack_bot import post_papers_batch
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ def job():
     init_db()
     
     # 2. Fetch recent papers from targeted venues
-    papers = fetch_recent_papers(days_back=7, limit_per_venue=3)
+    papers = fetch_recent_papers(days_back=365, limit_per_venue=50)
     logger.info(f"Fetched {len(papers)} candidate papers.")
     
     processed_count = 0

@@ -18,8 +18,12 @@ def fetch_recent_papers(days_back: int = 7, limit_per_venue: int = 5) -> List[Di
     We will query by venue string and filter by year, then manually filter dates if needed.
     """
     
-    # Calculate target year
-    current_year = datetime.now().year
+    # Calculate target year range based on days_back
+    current_date = datetime.now()
+    current_year = current_date.year
+    start_year = (current_date - timedelta(days=days_back)).year
+    
+    year_param = f"{start_year}-{current_year}" if start_year != current_year else str(current_year)
     
     all_papers = []
     
@@ -38,9 +42,9 @@ def fetch_recent_papers(days_back: int = 7, limit_per_venue: int = 5) -> List[Di
         # We query the venue specifically.
         params = {
             "query": venue,
-            "year": str(current_year),
-            "fields": "paperId,title,abstract,authors,venue,year,url,publicationDate,externalIds",
-            "limit": limit_per_venue * 2 # Fetch a bit more to filter client-side
+            "year": year_param,
+            "fields": "paperId,title,abstract,authors,venue,year,url,publicationDate,externalIds,tldr",
+            "limit": min(limit_per_venue * 3, 100) # Fetch up to maximum allowed (100) to filter client-side
         }
         
         try:
@@ -79,9 +83,12 @@ def fetch_recent_papers(days_back: int = 7, limit_per_venue: int = 5) -> List[Di
                     
                     if venue.lower() in p_venue.lower():
                         is_valid_venue = True
-                    # Many ML conferences don't have a clean venue string right away, they might just have it in the title
-                    elif f"{venue} {current_year}" in p_title or f"{venue} {current_year-1}" in p_title:
-                        is_valid_venue = True
+                    else:
+                        # Many ML conferences don't have a clean venue string right away, they might just have it in the title
+                        for y in range(start_year, current_year + 1):
+                            if f"{venue} {y}" in p_title or f"{venue}{y}" in p_title:
+                                is_valid_venue = True
+                                break
                         
                     if not is_valid_venue:
                         continue

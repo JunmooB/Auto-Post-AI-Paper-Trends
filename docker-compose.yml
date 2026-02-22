@@ -12,3 +12,13 @@ services:
     environment:
       # Override DB_PATH via environment variables to ensure it persists in the volume map
       - DB_PATH=/app/data/papers.db
+
+  sqlite-web:
+    image: coleifer/sqlite-web
+    container_name: sqlite-admin
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    command: sqlite_web -H 0.0.0.0 -x /data/papers.db
