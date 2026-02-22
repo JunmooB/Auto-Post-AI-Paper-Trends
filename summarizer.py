@@ -20,9 +20,12 @@ def summarize_paper(paper_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
     abstract = paper_data.get('abstract', '')
     venue = paper_data.get('venue', 'Unknown Venue')
     
-    if not abstract:
-        logger.warning(f"Paper '{title}' has no abstract. Skipping summarization.")
-        return None
+    tldr_data = paper_data.get('tldr', {})
+    tldr_text = tldr_data.get('text', '') if isinstance(tldr_data, dict) else ''
+    
+    if not abstract and not tldr_text:
+        logger.warning(f"Paper '{title}' has no abstract or tldr. Will attempt to summarize based on title only.")
+        abstract = "(초록 제공되지 않음. 제목을 바탕으로 추론하여 작성할 것)"
         
     doi = paper_data.get('externalIds', {}).get('DOI', 'N/A')
     url = paper_data.get('url', '')
@@ -35,21 +38,23 @@ def summarize_paper(paper_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
 
 [중요: Slack mrkdwn 포맷팅 규칙]
 Slack API를 통해 전송되므로 일반 마크다운 대신 아래 규칙만 절대적으로 지키세요:
-1. 굵은 글씨(Bold): 반드시 별표 한 개 사용 (*텍스트*) - 절대 별표 두 개(**)를 쓰지 마세요.
+1. 굵은 글씨(Bold): 반드시 별표 한 개 사용 (*단어*) - 절대 별표 두 개(**)를 쓰지 마세요.
+   - 단, 문장 전체를 굵게 처리하면 절대 안 됩니다! 핵심이 되는 1~2개 키워드에만 굵은 글씨를 적용하세요.
 2. 글머리 기호(List): 하이픈과 띄어쓰기 사용 (- 텍스트)
-3. 헤딩(Heading): # 기호를 쓰지 말고 굵은 글씨(*텍스트*)로 대체하세요.
+3. 헤딩(Heading): # 기호를 쓰지 마세요.
 
 출력 형식은 정확히 다음을 따르세요:
 
 ONE_LINE:
-[논문의 가장 핵심적인 가치를 비유나 직관적인 표현을 써서 아주 짧은 한 줄로 작성. 예: *텍스트-비디오 생성 속도를 10배 높인 새로운 확산 모델*]
+[논문의 가장 핵심적인 가치를 비유나 직관적인 표현을 써서 아주 짧은 한 줄로 작성하되, 핵심 키워드 1~2개만 *강조* 할 것]
 
 QUICK_SUMMARY:
-- *문제*: [기존의 한계나 풀고자 한 문제를 명사형이나 아주 짧은 구절로 1줄 작성]
-- *해결*: [어떤 기술을 썼는지 핵심 키워드 위주로 1줄 작성]
-- *효과*: [이로 인해 얻게 된 결과나 실질적인 이점을 1줄 작성]
+- 문제: [기존의 한계나 풀고자 한 문제 (문장 전체 볼드 금지, 핵심 단어만 *볼드*)]
+- 해결: [어떤 기술을 썼는지 (문장 전체 볼드 금지, 핵심 단어만 *볼드*)]
+- 효과: [이로 인해 얻게 된 결과나 실질적인 이점 (문장 전체 볼드 금지, 핵심 단어만 *볼드*)]
 
 Paper Title: {title}
+TLDR (Author/AI Summary): {tldr_text}
 Abstract: {abstract}
 """
 

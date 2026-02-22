@@ -36,22 +36,25 @@ graph TD
 ```
 
 ### 상세 워크플로우 설명
-1. **Fetch (수집)**: `paper_fetcher.py`가 [Semantic Scholar API](https://www.semanticscholar.org/product/api)를 호출합니다. 지정된 학회 이름과 현재 연도를 기반으로 검색하며, API의 Rate Limit 방지를 위해 지수 백오프(Exponential Backoff) 로직이 적용되어 있습니다.
-2. **Filter & Deduplicate (필터링 및 중복제거)**: 수집된 논문이 타겟 학회 논문인지 검증하고, `database.py` 시스템을 통해 이미 Slack에 업로드된 적이 있는 논문인지 (DB 기반) 검사합니다.
-3. **Summarize (요약)**: `summarizer.py`가 OpenAI 호환 API (OpenAI 본가, vLLM, Ollama 등)를 사용하여 논문을 비전문가도 10초 만에 파악할 수 있도록 요약합니다. 결과는 **한 줄 요약 (ONE_LINE)**과 **문제/해결/효과 세 가지로 구성된 빠른 요약 (QUICK_SUMMARY)**으로 파싱됩니다.
-4. **Publish (발행)**: `slack_bot.py`가 요약된 데이터를 가장 안전하고 깔끔한 형태인 **Slack Block Kit**을 이용하여 포스팅합니다. 메인 채널에는 직관적인 한 줄 요약 메세지들을 모아서 전송하고, 각 논문의 자세한 분석(문제, 해결, 효과)은 **스레드 내부에 구조화된 블록 리스트** 형태로 안전하게 발송됩니다. 메시지가 정상적으로 전송되면 DB에 논문 ID가 추가됩니다.
+1. **Fetch (수집)**: `paper_fetcher.py`가 [Semantic Scholar API](https://www.semanticscholar.org/product/api)를 호출합니다. 지정된 학회 이름과 동적으로 계산된 연도 범위(기본 최근 ?일)를 기반으로 검색하며, API의 Rate Limit 방지를 위해 지수 백오프(Exponential Backoff) 로직이 적용되어 있습니다. 수집 시, AI 요약본인 `tldr` 필드도 함께 가져와 요약 품질을 높입니다.
+2. **Filter & Deduplicate (필터링 및 중복제거)**: 수집된 논문이 타겟 학회 논문인지 다년간의 연도에 걸쳐 유연하게 검증하고, `database.py` 시스템을 통해 이미 Slack에 업로드된 적이 있는 논문인지 (DB 기반) 검사합니다.
+3. **Summarize (요약)**: `summarizer.py`가 OpenAI 호환 API (OpenAI 본가, vLLM, Ollama 등)를 사용하여 논문을 비전문가도 10초 만에 파악할 수 있도록 요약합니다. 초록(Abstract)이 없어도 `tldr`이나 제목을 기반으로 추론하며, 과도한 Bold 처리를 방지하여 가독성을 높였습니다.
+4. **Publish (발행)**: `slack_bot.py`가 요약된 데이터를 가장 안전하고 깔끔한 형태인 **Slack Block Kit**을 이용하여 포스팅합니다. 
+   - 메인 채널: 직관적인 한 줄 요약과 **DOI 기반 원문 링크**를 제공
+   - 스레드(Thread): 각 논문의 자세한 분석(문제, 해결, 효과)을 **가독성 높은 헤더 및 구분선 블록** 형태로 발송
+   - 전송 성공 시에만 DB(`processed_papers`)에 논문 ID를 안전하게 기록하여 재시도를 보장합니다.
 
 ---
 
 ## 📂 Project Structure
 
-- `main.py`: 전체 파이프라인을 제어하고 스케줄링(기본 24시간)하는 오케스트레이션 스크립트입니다.
+- `main.py`: 전체 파이프라인을 제어하고 스케줄링(기본 24시간)하는 메인 오케스트레이션 스크립트입니다.
 - `config.py`: `.env` 파일로부터 환경 변수를 로드하고 전역 설정값을 관리합니다.
 - `paper_fetcher.py`: Semantic Scholar API와 통신하여 논문 데이터를 수집합니다.
 - `database.py`: 로컬 SQLite DB(`papers.db`)를 관리하여 중복 발송을 제어합니다.
 - `summarizer.py`: OpenAI 호환 LLM API와 통신하여 요약본을 생성합니다.
 - `slack_bot.py`: 요약된 데이터를 Slack 메시지 템플릿(Block Kit)으로 변환 후 전송합니다.
-- `Dockerfile` & `docker-compose.yml`: 시스템 의존성 없이 독립적이고 안정적으로 서버를 띄우기 위한 컨테이너라이제이션 설정 파일입니다.
+- `Dockerfile` & `docker-compose.yml`: 백엔드 봇 컨테이너 및 DB 뷰어(`sqlite-web`)를 띄우기 위한 설정 파일입니다.
 
 ---
 
@@ -59,20 +62,24 @@ graph TD
 
 프로젝트를 실행하려면 `Docker`와 `docker-compose`가 설치되어 있어야 합니다.
 
-1. **환경 변수 템플릿 복사 및 수정**
+1. **환경 변수 템플릿 복사 및 설정**
    ```bash
    cp .env.example .env
-   # .env 파일을 열어 Slack Token, Channel ID, OpenAI API Key 등을 입력하세요.
+   # .env 파일을 열어 Slack Token, Channel ID, OpenAI API Key 등 필수 정보를 입력하세요.
    ```
 
-2. **Docker Compose를 통한 백그라운드 실행**
+2. **Docker Compose를 통한 백그라운드 서버 실행**
    ```bash
-   docker-compose up -d --build
+   docker compose up --build -d
    ```
+   > 💡 코드 변경 사항이 있을 시 재실행을 위해 항상 `--build` 플래그를 사용하는 것을 권장합니다.
 
-3. **작동 확인 및 로그 보기**
+3. **작동 확인 및 로그 모니터링**
    ```bash
-   docker-compose logs -f
+   docker logs -f ai-paper-bot
    ```
 
-> **Note**: 데이터베이스 파일인 `papers.db`는 호스트의 `./data/` 디렉토리에 마운트되므로, Docker 컨테이너가 재시작되어도 기존 처리 내역(중복 방지 데이터)이 안전하게 보존됩니다.
+4. **처리된 논문 DB GUI 확인 (sqlite-web)**
+   - 컨테이너가 실행된 후, 브라우저에서 `http://localhost:8080` 에 접속하세요.
+   - `processed_papers` 테이블에서 지금까지 성공적으로 슬랙에 배달도 완료되고 중복 처리 방지용으로 저장된 논문들의 목록을 직관적으로 확인하고 검색할 수 있습니다.
+   > **Note**: 데이터베이스 파일인 `papers.db`는 호스트의 `./data/` 디렉토리에 마운트되므로, Docker 컨테이너가 갱신되어도 기존 처리 내역이 안전하게 보존됩니다.

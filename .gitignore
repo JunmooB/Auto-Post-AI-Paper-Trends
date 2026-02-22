@@ -52,3 +52,6 @@ logs/
 .idea/
 *.swp
 *.swo
+
+# SQLite DB & Data
+data/

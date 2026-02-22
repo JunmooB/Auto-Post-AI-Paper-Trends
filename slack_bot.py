@@ -43,7 +43,12 @@ def post_papers_batch(papers_batch: List[Dict[str, Any]]) -> bool:
     ]
 
     for i, paper in enumerate(papers_batch):
-        url = paper.get('url') or f"https://api.semanticscholar.org/CorpusID:{paper.get('paperId')}"
+        external_ids = paper.get('externalIds', {})
+        doi = external_ids.get('DOI')
+        if doi:
+            url = f"https://doi.org/{doi}"
+        else:
+            url = paper.get('url') or f"https://api.semanticscholar.org/CorpusID:{paper.get('paperId')}"
         
         summary_dict = paper.get('summary_dict', {"one_line": "요약 실패", "details": "상세 내용 없음"})
         one_line = summary_dict.get('one_line', '')
@@ -52,7 +57,7 @@ def post_papers_batch(papers_batch: List[Dict[str, Any]]) -> bool:
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*{i+1}.* {one_line} (<{url}|원문 링크>)"
+                "text": f"*{i+1}.* {one_line}\n👉 <{url}|원문 링크(DOI등)>"
             }
         })
 
@@ -77,22 +82,25 @@ def post_papers_batch(papers_batch: List[Dict[str, Any]]) -> bool:
             solution = details.get('solution', 'N/A')
             effect = details.get('effect', 'N/A')
             
+            safe_title = title[:140] + "..." if len(title) > 140 else title
+            
             thread_blocks = [
                 {
-                    "type": "section",
+                    "type": "header",
                     "text": {
-                        "type": "mrkdwn",
-                        "text": f"*{i+1}. 논문 제목:* {title}"
+                        "type": "plain_text",
+                        "text": f"📄 {i+1}. {safe_title}",
+                        "emoji": True
                     }
                 },
-                {"type": "divider"},
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": f"• *문제:* {problem}\n• *해결:* {solution}\n• *효과:* {effect}"
+                        "text": f"*문제:* {problem}\n\n*해결:* {solution}\n\n*효과:* {effect}"
                     }
-                }
+                },
+                {"type": "divider"}
             ]
             
             client.chat_postMessage(
